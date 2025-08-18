@@ -9,6 +9,10 @@ public class EnemyController : MonoBehaviour
 
     private Transform player;
     private EnemyHealth health;
+    [Header("Attack")]
+    public GameObject fireballPrefab;
+    public float attackCooldown = 2f;
+    private float lastAttackTime;
 
     public void Initialize(GameStats stats, int expReward, int goldReward, bool isBoss)
     {
@@ -19,43 +23,42 @@ public class EnemyController : MonoBehaviour
 
         health = GetComponent<EnemyHealth>();
         health.Initialize(stats.health);
+
+        DebugLogger.Log($"Enemy initialized - IsBoss: {isBoss}, HP: {stats.health}");
     }
 
     private void Start()
     {
-        // Ищем игрока при старте
-        var playerObj = GameObject.FindGameObjectWithTag("Player");
-        if (playerObj != null)
+        player = GameObject.FindGameObjectWithTag("Player")?.transform;
+        if (isBoss)
         {
-            player = playerObj.transform;
+            InvokeRepeating(nameof(AttackPlayer), stats.attackSpeed, stats.attackSpeed);
+            DebugLogger.Log("Boss enemy started attacking", this);
+        }
+    }
+    private void Update()
+    {
+        if (player == null) return;
+
+        if (Time.time > lastAttackTime + attackCooldown)
+        {
+            AttackPlayer();
+            lastAttackTime = Time.time;
+        }
+    }
+    private void AttackPlayer()
+    {
+        // Для ближней атаки:
+        if (Vector2.Distance(transform.position, player.position) < 2f)
+        {
+            player.GetComponent<PlayerHealth>().TakeDamage(stats.attack);
         }
         else
         {
-            Debug.LogError("Player object not found! Make sure it has 'Player' tag.");
-        }
-    }
-
-    private void Update()
-    {
-        if (player == null) return; // Не двигаться, если игрок не найден
-
-        MoveTowardsPlayer();
-    }
-
-    private void MoveTowardsPlayer()
-    {
-        transform.position = Vector2.MoveTowards(
-            transform.position,
-            player.position,
-            stats.moveSpeed * Time.deltaTime
-        );
-    }
-
-    private void OnCollisionEnter2D(Collision2D collision)
-    {
-        if (collision.gameObject.CompareTag("Player"))
-        {
-            collision.gameObject.GetComponent<PlayerController>().TakeDamage(stats.attack);
+            // Для дальнобойной атаки
+            Vector2 direction = (player.position - transform.position).normalized;
+            GameObject fireball = Instantiate(fireballPrefab, transform.position, Quaternion.identity);
+            fireball.GetComponent<Projectile>().SetTarget(player);
         }
     }
 
@@ -66,8 +69,13 @@ public class EnemyController : MonoBehaviour
         {
             player.AddExp(expReward);
             player.AddGold(goldReward);
-            if (isBoss) player.AddCrystals(5);
+            if (isBoss)
+            {
+                player.AddCrystals(5);
+                WaveSystem.Instance.OnBossDefeated();
+            }
         }
-        Destroy(gameObject);
+        DebugLogger.Log($"Enemy died - IsBoss: {isBoss}", this);
+        gameObject.SetActive(false); // Вместо Destroy для object pooling
     }
 }

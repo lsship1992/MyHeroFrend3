@@ -1,22 +1,31 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance { get; private set; }
+    public static GameManager Instance;
 
-    [Header("Подсистемы")]
-    public WaveSystem waveSystem;
+    [Header("References")]
     public SpawnManager spawnManager;
+    public WaveSystem waveSystem;
     public UIManager uiManager;
-    public GameData gameData;
 
-    void Awake()
+    [Header("Player")]
+    public GameObject playerPrefab;
+    public Transform playerSpawnPoint;
+
+    [Header("Enemies")]
+    public List<GameObject> enemyPrefabs;
+    public List<Transform> enemySpawnPoints;
+
+    private GameObject currentPlayer;
+    private bool playerSpawned = false; // Добавляем флаг
+    private void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
-            InitializeAllSystems();
+            DebugLogger.Log("GameManager initialized as singleton");
         }
         else
         {
@@ -24,10 +33,33 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void InitializeAllSystems()
+    private void Start()
     {
-        waveSystem.Initialize(this);
+        InitializeManagers();
+        SpawnPlayer();
+        waveSystem.StartWaveCycle();
+    }
+
+    private void InitializeManagers()
+    {
+        if (spawnManager == null) spawnManager = GetComponent<SpawnManager>();
+        if (waveSystem == null) waveSystem = GetComponent<WaveSystem>();
+        if (uiManager == null) uiManager = FindObjectOfType<UIManager>();
+
         spawnManager.Initialize(this);
-        uiManager.Initialize(this);
+        waveSystem.Initialize(this, spawnManager, uiManager);
+
+        DebugLogger.Log("All managers initialized");
+    }
+
+    public void SpawnPlayer()
+    {
+        if (playerSpawned) return;
+
+        currentPlayer = Instantiate(playerPrefab, playerSpawnPoint.position, Quaternion.identity);
+        waveSystem.SetPlayer(currentPlayer.GetComponent<PlayerController>());
+        playerSpawned = true;
+
+        DebugLogger.Log("Player spawned");
     }
 }

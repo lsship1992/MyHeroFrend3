@@ -201,10 +201,10 @@ namespace Assets.HeroEditor.Common.Scripts.CharacterScripts.Firearms
 
                 var sortingOrder = Character.FirearmsRenderers.Single(j => j.name == "Rifle").sortingOrder;
 
-                foreach (var r in bullet.Renderers)
-                {
-                    r.sortingOrder = sortingOrder;
-                }
+                //foreach (var r in bullet.Renderers)
+                //{
+                 //   r.sortingOrder = sortingOrder;
+               // }
 
                 var ignoreCollider = Character.GetComponent<Collider>();
 

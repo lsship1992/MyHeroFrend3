@@ -17,5 +17,16 @@ public class GameStats
 {
     public int health;
     public int attack;
-    [Range(0.1f, 2f)] public float attackSpeed;
+    public int defense;
+    public float moveSpeed;
+    public float attackSpeed;
+
+    public GameStats(int health, int attack, int defense, float moveSpeed, float attackSpeed)
+    {
+        this.health = health;
+        this.attack = attack;
+        this.defense = defense;
+        this.moveSpeed = moveSpeed;
+        this.attackSpeed = attackSpeed;
+    }
 }
