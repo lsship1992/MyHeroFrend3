@@ -13,25 +13,16 @@ public class SpawnManager : MonoBehaviour
     public Transform[] enemySpawnPoints;
 
     private GameManager gameManager;
-
-    public void Initialize(GameManager manager)
+    public WaveSystem waveSystem;
+    // И создайте класс WaveSystem:
+    [System.Serializable]
+    public class WaveSystem
     {
-        gameManager = manager;
-        SpawnPlayer();
-        DebugLogger.Log("SpawnManager initialized");
+        public int currentEnemyCount;
+        // Другие нужные параметры волн
     }
 
-    public void SpawnPlayer()
-    {
-        GameObject player = Object.Instantiate(
-            playerPrefab,
-            playerSpawnPoint.position,
-            Quaternion.identity
-        );
-        gameManager.waveSystem.SetPlayer(player.GetComponent<PlayerController>());
-        DebugLogger.Log("Player spawned");
-    }
-
+       
     public void SpawnEnemy(Vector3 position, bool isBoss)
     {
         GameObject prefab = isBoss ? bossPrefab : enemyPrefab;

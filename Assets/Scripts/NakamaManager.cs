@@ -8,6 +8,7 @@ public class NakamaManager : MonoBehaviour
 {
     public static NakamaManager Instance { get; private set; }
 
+    // Основные компоненты Nakama
     public IClient Client { get; private set; }
     public ISession Session { get; private set; }
     public ISocket Socket { get; private set; }
@@ -19,6 +20,11 @@ public class NakamaManager : MonoBehaviour
     public int port = 7350;
     public string serverKey = "f7069cefe7e14000d6ab27cf331d42a2f0982bc9b88788c70be6106702650f21";
 
+    // Константы для прав доступа к хранилищу
+    private const int StorageReadPermissionOwner = 1; // Только владелец
+    private const int StorageWritePermissionOwner = 1; // Только владелец
+
+    #region Инициализация
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -42,12 +48,13 @@ public class NakamaManager : MonoBehaviour
 
         try
         {
+            // Создаем клиент Nakama
             Client = new Client(scheme, host, port, serverKey)
             {
                 Timeout = 10
             };
 
-            // Попытка восстановить сессию
+            // Пробуем восстановить сессию из PlayerPrefs
             var authToken = PlayerPrefs.GetString("nakama_token");
             if (!string.IsNullOrEmpty(authToken))
             {
@@ -62,7 +69,7 @@ public class NakamaManager : MonoBehaviour
                 PlayerPrefs.DeleteKey("nakama_token");
             }
 
-            // Новая аутентификация
+            // Новая аутентификация по устройству
             await AuthenticateDevice();
             Socket = Client.NewSocket();
             await Socket.ConnectAsync(Session);
@@ -73,7 +80,9 @@ public class NakamaManager : MonoBehaviour
             Debug.LogError($"Nakama initialization failed: {e}");
         }
     }
+    #endregion
 
+    #region Аутентификация
     private async Task AuthenticateDevice()
     {
         try
@@ -103,38 +112,120 @@ public class NakamaManager : MonoBehaviour
             await AuthenticateDevice();
         }
     }
+    #endregion
 
+    #region Работа с хранилищем
+    /// <summary>
+    /// Сохраняет данные в хранилище Nakama
+    /// </summary>
     public async Task SaveCharacterData(string collection, string key, string value)
     {
         await EnsureSessionIsValid();
+
         var writeObject = new WriteStorageObject
         {
             Collection = collection,
             Key = key,
-            Value = value
+            Value = value,
+            PermissionRead = StorageReadPermissionOwner,
+            PermissionWrite = StorageWritePermissionOwner
         };
+
         await Client.WriteStorageObjectsAsync(Session, new[] { writeObject });
     }
 
-    // Методы для кастомизации персонажа
-
+    /// <summary>
+    /// Загружает данные из хранилища Nakama
+    /// </summary>
     public async Task<string> LoadCharacterData(string collection, string key)
     {
         await EnsureSessionIsValid();
 
-        var storageObjectId = new StorageObjectId
+        var objectId = new StorageObjectId
         {
             Collection = collection,
             Key = key,
             UserId = Session.UserId
         };
 
-        var result = await Client.ReadStorageObjectsAsync(Session, new[] { storageObjectId });
-
-        if (result.Objects != null && result.Objects.Any())
-        {
-            return result.Objects.First().Value;
-        }
-        return null;
+        var result = await Client.ReadStorageObjectsAsync(Session, new[] { objectId });
+        return result.Objects?.FirstOrDefault()?.Value;
     }
+    #endregion
+
+    #region Лидерборды
+    /// <summary>
+    /// Инициализирует лидерборд (создает при первом запуске)
+    /// </summary>
+    public async Task InitializeLeaderboard()
+    {
+        try
+        {
+            // Пытаемся записать тестовый результат (если лидерборд существует)
+            await Client.WriteLeaderboardRecordAsync(
+                session: Session,
+                leaderboardId: "wave_leaderboard",
+                score: 0
+            );
+        }
+        catch (ApiResponseException e) when (e.StatusCode == 404)
+        {
+            Debug.LogWarning("Leaderboard doesn't exist, creating manually...");
+            await CreateLeaderboardManually();
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Leaderboard check failed: {e.Message}");
+        }
+    }
+    private async Task CreateLeaderboardManually()
+    {
+        // Временное решение - вывести инструкцию в лог
+        Debug.LogError(@"
+    [ВНИМАНИЕ] Необходимо создать лидерборд вручную:
+    1. Откройте Nakama Console: http://ваш-сервер:7351
+    2. Перейдите в раздел Leaderboards
+    3. Нажмите 'Create Leaderboard'
+    4. Заполните:
+       - ID: wave_leaderboard
+       - Sort: Descending
+       - Operator: Best
+       - Reset: Never
+    ");
+    }
+    /// <summary>
+    /// Отправляет результат волны в лидерборд
+    /// </summary>
+    public async Task SubmitWaveResult(int wave)
+    {
+        await EnsureSessionIsValid();
+
+        try
+        {
+            await Client.WriteLeaderboardRecordAsync(
+                session: Session,
+                leaderboardId: "wave_leaderboard",
+                score: wave
+            );
+            Debug.Log($"Wave {wave} submitted to leaderboard!");
+        }
+        catch (ApiResponseException e)
+        {
+            Debug.LogError($"Leaderboard submit failed: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Получает записи лидерборда
+    /// </summary>
+    public async Task<IApiLeaderboardRecordList> GetLeaderboard(int limit = 10)
+    {
+        await EnsureSessionIsValid();
+        return await Client.ListLeaderboardRecordsAsync(
+            session: Session,
+            leaderboardId: "wave_leaderboard",
+            limit: limit
+        );
+    }
+    #endregion
 }

@@ -1,31 +1,24 @@
+using System;
+using System.Collections;
+using System.Threading.Tasks;
 using UnityEngine;
-using System.Collections.Generic;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
-
-    [Header("References")]
-    public SpawnManager spawnManager;
-    public WaveSystem waveSystem;
-    public UIManager uiManager;
-
-    [Header("Player")]
     public GameObject playerPrefab;
-    public Transform playerSpawnPoint;
-
-    [Header("Enemies")]
-    public List<GameObject> enemyPrefabs;
-    public List<Transform> enemySpawnPoints;
-
     private GameObject currentPlayer;
-    private bool playerSpawned = false; // Добавляем флаг
-    private void Awake()
+    public int currentWave = 1;
+    public int enemiesInWave = 5;
+    private int enemiesDefeated = 0;
+
+    #region Инициализация
+    void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
-            DebugLogger.Log("GameManager initialized as singleton");
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
@@ -33,33 +26,109 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void Start()
+    private async void Start()
     {
-        InitializeManagers();
+        // Ждем инициализацию Nakama
+        while (!NakamaManager.Instance.IsInitialized)
+        {
+            await Task.Yield();
+        }
+
+        // Инициализируем лидерборд
+        await NakamaManager.Instance.InitializeLeaderboard();
+
+        // Загружаем сохраненный прогресс
+        await LoadGameProgress();
+        StartGame();
+    }
+
+    private async Task LoadGameProgress()
+    {
+        try
+        {
+            var progress = await NakamaManager.Instance.LoadCharacterData(
+                "game_progress",
+                "current_wave"
+            );
+
+            if (!string.IsNullOrEmpty(progress))
+            {
+                currentWave = int.Parse(progress);
+                Debug.Log($"Loaded progress: Wave {currentWave}");
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Load progress failed: {e.Message}");
+        }
+    }
+    #endregion
+
+    #region Игровой процесс
+    private void StartGame()
+    {
         SpawnPlayer();
-        waveSystem.StartWaveCycle();
+        StartCoroutine(SpawnWave());
     }
 
-    private void InitializeManagers()
+    public void EnemyDefeated()
     {
-        if (spawnManager == null) spawnManager = GetComponent<SpawnManager>();
-        if (waveSystem == null) waveSystem = GetComponent<WaveSystem>();
-        if (uiManager == null) uiManager = FindObjectOfType<UIManager>();
+        enemiesDefeated++;
 
-        spawnManager.Initialize(this);
-        waveSystem.Initialize(this, spawnManager, uiManager);
-
-        DebugLogger.Log("All managers initialized");
+        if (enemiesDefeated >= enemiesInWave)
+        {
+            CompleteWave();
+        }
     }
 
-    public void SpawnPlayer()
+    public async void CompleteWave()
     {
-        if (playerSpawned) return;
+        currentWave++;
+        enemiesDefeated = 0;
+        enemiesInWave += 3;
 
-        currentPlayer = Instantiate(playerPrefab, playerSpawnPoint.position, Quaternion.identity);
-        waveSystem.SetPlayer(currentPlayer.GetComponent<PlayerController>());
-        playerSpawned = true;
+        try
+        {
+            // Сохраняем прогресс
+            await NakamaManager.Instance.SaveCharacterData(
+                "game_progress",
+                "current_wave",
+                currentWave.ToString()
+            );
 
-        DebugLogger.Log("Player spawned");
+            // Отправляем в лидерборд
+            await NakamaManager.Instance.SubmitWaveResult(currentWave);
+
+            Debug.Log($"Wave {currentWave} completed!");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Save progress failed: {e.Message}");
+        }
+
+        StartCoroutine(SpawnWave());
     }
+
+    IEnumerator SpawnWave()
+    {
+        Debug.Log($"Starting wave {currentWave}");
+        for (int i = 0; i < enemiesInWave; i++)
+        {
+            if (EnemySpawner.Instance != null)
+            {
+                EnemySpawner.Instance.SpawnEnemy();
+            }
+            yield return new WaitForSeconds(1f);
+        }
+    }
+
+    void SpawnPlayer()
+    {
+        if (currentPlayer == null)
+        {
+            currentPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
+            DontDestroyOnLoad(currentPlayer);
+        }
+    }
+    #endregion
 }
