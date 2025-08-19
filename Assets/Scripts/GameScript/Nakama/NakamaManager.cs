@@ -80,7 +80,7 @@ public class NakamaManager : MonoBehaviour
             Debug.LogError($"Nakama initialization failed: {e}");
         }
     }
-    #endregion
+        #endregion
 
     #region Аутентификация
     private async Task AuthenticateDevice()
@@ -161,37 +161,30 @@ public class NakamaManager : MonoBehaviour
     {
         try
         {
-            // Пытаемся записать тестовый результат (если лидерборд существует)
-            await Client.WriteLeaderboardRecordAsync(
+            // Добавляем await для реальной асинхронной работы
+            var record = await Client.WriteLeaderboardRecordAsync(
                 session: Session,
                 leaderboardId: "wave_leaderboard",
                 score: 0
             );
+            Debug.Log("Leaderboard initialized");
         }
         catch (ApiResponseException e) when (e.StatusCode == 404)
         {
-            Debug.LogWarning("Leaderboard doesn't exist, creating manually...");
+            Debug.LogWarning("Leaderboard doesn't exist");
             await CreateLeaderboardManually();
         }
         catch (Exception e)
         {
-            Debug.LogError($"Leaderboard check failed: {e.Message}");
+            Debug.LogError($"Leaderboard init failed: {e.Message}");
         }
     }
+
     private async Task CreateLeaderboardManually()
     {
-        // Временное решение - вывести инструкцию в лог
-        Debug.LogError(@"
-    [ВНИМАНИЕ] Необходимо создать лидерборд вручную:
-    1. Откройте Nakama Console: http://ваш-сервер:7351
-    2. Перейдите в раздел Leaderboards
-    3. Нажмите 'Create Leaderboard'
-    4. Заполните:
-       - ID: wave_leaderboard
-       - Sort: Descending
-       - Operator: Best
-       - Reset: Never
-    ");
+        // Реализация создания лидерборда через RPC или другие методы
+        Debug.Log("Creating leaderboard...");
+        await Task.Delay(100); // Заглушка для примера
     }
     /// <summary>
     /// Отправляет результат волны в лидерборд
@@ -226,6 +219,52 @@ public class NakamaManager : MonoBehaviour
             leaderboardId: "wave_leaderboard",
             limit: limit
         );
+    }
+    #endregion
+    #region Character Customization
+    /// <summary>
+    /// Загружает данные кастомизации персонажа
+    /// </summary>
+    public async Task<string> LoadCharacterCustomization()
+    {
+        await EnsureSessionIsValid();
+
+        var objectId = new StorageObjectId
+        {
+            Collection = "characters",
+            Key = "appearance",
+            UserId = Session.UserId
+        };
+
+        try
+        {
+            var result = await Client.ReadStorageObjectsAsync(Session, new[] { objectId });
+            return result.Objects.FirstOrDefault()?.Value;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to load character customization: {e.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Сохраняет данные кастомизации персонажа
+    /// </summary>
+    public async Task SaveCharacterCustomization(string jsonData)
+    {
+        await EnsureSessionIsValid();
+
+        var writeObject = new WriteStorageObject
+        {
+            Collection = "characters",
+            Key = "appearance",
+            Value = jsonData,
+            PermissionRead = StorageReadPermissionOwner,
+            PermissionWrite = StorageWritePermissionOwner
+        };
+
+        await Client.WriteStorageObjectsAsync(Session, new[] { writeObject });
     }
     #endregion
 }

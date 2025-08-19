@@ -12,7 +12,7 @@ public class GameManager : MonoBehaviour
     public int enemiesInWave = 5;
     private int enemiesDefeated = 0;
 
-    #region Инициализация
+    #region Initialization
     void Awake()
     {
         if (Instance == null)
@@ -39,7 +39,7 @@ public class GameManager : MonoBehaviour
 
         // Загружаем сохраненный прогресс
         await LoadGameProgress();
-        StartGame();
+        await StartGame(); // Изменено на асинхронный вызов
     }
 
     private async Task LoadGameProgress()
@@ -64,10 +64,10 @@ public class GameManager : MonoBehaviour
     }
     #endregion
 
-    #region Игровой процесс
-    private void StartGame()
+    #region Game Flow
+    private async Task StartGame()
     {
-        SpawnPlayer();
+        await SpawnPlayer(); // Ожидаем завершения спавна игрока
         StartCoroutine(SpawnWave());
     }
 
@@ -122,13 +122,37 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void SpawnPlayer()
+    /// <summary>
+    /// Спавнит игрока с учетом кастомизации
+    /// </summary>
+    private async Task SpawnPlayer()
     {
-        if (currentPlayer == null)
+        if (currentPlayer != null) return;
+
+        // Загружаем данные персонажа
+        var characterData = await NakamaCharacterSystem.Instance.LoadCharacter();
+
+        if (characterData != null)
         {
             currentPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
-            DontDestroyOnLoad(currentPlayer);
+
+            // Применяем кастомизацию
+            var editor = currentPlayer.GetComponent<CharacterEditorController>();
+            if (editor != null)
+            {
+                editor.LoadFromJson(characterData.appearanceJson);
+            }
+            else
+            {
+                Debug.LogError("CharacterEditorController not found!");
+            }
         }
+        else
+        {
+            currentPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
+        }
+
+        DontDestroyOnLoad(currentPlayer);
     }
     #endregion
 }
